@@ -1,5 +1,5 @@
 /**
- * PlayBook Pedal Firmware v1.1
+ * PlayBook Pedal Firmware v1.2 (ESP32-S3)
  * MIT License · https://github.com/playbook-app/playbook-pedal-firmware
  *
  * Teclado Bluetooth (BLE HID) pra ESP32-WROOM-32 — vira página no PlayBook
@@ -12,10 +12,16 @@
  *   PgDn → rolar pra baixo     ←  → música anterior/próxima (variante 4b)
  *   PgUp → rolar pra cima
  *
- * Hardware deste protótipo: ESP32-WROOM-32 DevKit (DOIT), 2 chaves em D4/D5
- * (comum no GND), alimentado por USB — sempre ligado, sem gerência de
- * bateria. A variante de 4 botões fica pronta no #define pra quando houver
- * enclosure com navegação de música.
+ * Hardware oficial: ESP32-S3 (WROOM-1, 44 pinos, duplo USB-C). Placa ÚNICA
+ * do projeto — o mesmo módulo faz BLE (este firmware) e, no futuro, o modo
+ * cabeado por USB HID nativo (firmware em desenvolvimento). O ESP32 clássico
+ * foi descartado: não faz USB HID nativo e custa mais.
+ *
+ * Chaves entre o GPIO e o GND (pull-up interno; pisado = LOW), alimentação
+ * pelo pino 5V0 — nunca ligar bateria direto no 3V3.
+ *
+ * GPIOs a EVITAR no S3: 0, 3, 45, 46 (afetam o boot), 19 e 20 (USB) e 26-37
+ * (memória do módulo). Livres pra sobra: 8, 16, 17, 18, 21.
  *
  * Requer a biblioteca ESP32-BLE-Keyboard (T-vK):
  *   https://github.com/T-vK/ESP32-BLE-Keyboard
@@ -28,13 +34,16 @@
 #define DEVICE_NAME "PlayBook Pedal"
 #define MANUFACTURER "PlayBook"
 #define DEBOUNCE_MS 25 // janela de estabilização do contato (borda)
-#define LED_PIN 2      // LED onboard do DevKit
+// LED de status EXTERNO (3mm + resistor 220R) -> GND. Não usamos o LED
+// onboard do S3: ele é RGB endereçável (WS2812) no GPIO 48 e exigiria outra
+// biblioteca só pra piscar.
+#define LED_PIN 15
 
 BleKeyboard bleKeyboard(DEVICE_NAME, MANUFACTURER, 100);
 
 // ---- 2 botões · vira página ----
-// D4 = volta (PgUp) · D5 = avança (PgDn/rola pra baixo). Ordem casada com o
-// layout físico deste enclosure (o botão de avançar é o do D5). Se um dia
+// GPIO 4 = volta (PgUp) · GPIO 5 = avança (PgDn/rola pra baixo). Ordem casada
+// com o layout físico do enclosure (o botão de avançar é o do 5). Se um dia
 // inverter, é só trocar a ordem aqui de novo.
 #if NUM_BUTTONS == 2
 const int BUTTON_PINS[] = {4, 5};
@@ -43,11 +52,14 @@ const char *NAMES[] = {"PgUp", "PgDn"};
 #endif
 
 // ---- 4 botões · vira página + muda música ----
+// GPIO 6 = próxima música · GPIO 7 = música anterior. (Os pinos antigos
+// 32/33/25/26 eram do ESP32 clássico e caem na faixa 26-37, reservada à
+// memória no S3 — não servem nesta placa.)
 #if NUM_BUTTONS == 4
-const int BUTTON_PINS[] = {32, 33, 25, 26};
-const uint8_t KEYS[] = {KEY_PAGE_UP, KEY_PAGE_DOWN, KEY_LEFT_ARROW,
-                        KEY_RIGHT_ARROW};
-const char *NAMES[] = {"PgUp", "PgDn", "Left", "Right"};
+const int BUTTON_PINS[] = {4, 5, 6, 7};
+const uint8_t KEYS[] = {KEY_PAGE_UP, KEY_PAGE_DOWN, KEY_RIGHT_ARROW,
+                        KEY_LEFT_ARROW};
+const char *NAMES[] = {"PgUp", "PgDn", "Right", "Left"};
 #endif
 
 // Estado de debounce por borda: dispara UMA tecla na transição
@@ -72,7 +84,7 @@ void blinkLed(int times, int ms) {
 void setup() {
   Serial.begin(115200);
   Serial.println();
-  Serial.println("PlayBook Pedal v1.1 — iniciando...");
+  Serial.println("PlayBook Pedal v1.2 (ESP32-S3) — iniciando...");
 
   pinMode(LED_PIN, OUTPUT);
 
